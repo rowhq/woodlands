@@ -4,6 +4,7 @@
   "devCommand": "npx expo start --web",
   "installCommand": "npm install",
   "framework": null,
+  "public": true,
   "routes": [
     {
       "src": "/.*",
