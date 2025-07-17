@@ -7,8 +7,8 @@
   "public": true,
   "crons": [
     {
-      "path": "/api/cron/scrape-events",
-      "schedule": "0 */4 * * *"
+      "path": "/api/cron/refresh-events",
+      "schedule": "*/5 * * * *"
     }
   ],
   "routes": [

@@ -43,6 +43,46 @@ export class WoodlandsOnlineScraper extends EventScraper {
     const today = new Date();
     
     return [
+      // TODAY'S EVENTS
+      {
+        title: 'Morning Coffee & Networking',
+        description: 'Weekly networking event for local business professionals and entrepreneurs. Casual atmosphere with great coffee and connections.',
+        date: today.toISOString().split('T')[0],
+        startTime: '7:30 AM',
+        endTime: '9:00 AM',
+        venue: {
+          name: 'Starbucks Market Street',
+          address: '9595 Six Pines Dr, The Woodlands, TX 77380',
+        },
+        price: 'Free',
+        url: `${this.baseUrl}/networking`,
+      },
+      {
+        title: 'Lunch & Learn: Financial Planning',
+        description: 'Educational seminar on financial planning for families. Free lunch provided with expert insights on saving and investing.',
+        date: today.toISOString().split('T')[0],
+        startTime: '12:00 PM',
+        endTime: '1:30 PM',
+        venue: {
+          name: 'The Woodlands Library',
+          address: '5000 Research Forest Dr, The Woodlands, TX 77381',
+        },
+        price: 'Free',
+        url: `${this.baseUrl}/financial-planning`,
+      },
+      {
+        title: 'Evening Yoga Flow',
+        description: 'Relaxing yoga session perfect for ending your day. All skill levels welcome. Bring your own mat.',
+        date: today.toISOString().split('T')[0],
+        startTime: '6:00 PM',
+        endTime: '7:00 PM',
+        venue: {
+          name: 'Riva Row Boat House',
+          address: '2101 Riva Row, The Woodlands, TX 77380',
+        },
+        price: '$15',
+        url: `${this.baseUrl}/yoga`,
+      },
       {
         title: 'The Woodlands Farmers Market',
         description: 'Weekly farmers market featuring local vendors, fresh produce, artisanal goods, and live music. Family-friendly atmosphere with over 50 vendors.',

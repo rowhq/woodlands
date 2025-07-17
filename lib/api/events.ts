@@ -1,49 +1,193 @@
 import { Event } from '../types/event';
 import { format } from 'date-fns';
-import { kv } from '@vercel/kv';
+import { getClientScraperService } from '../scrapers/client-scraper-service';
 
-// Switch between real scraped data and mock data
-const USE_MOCK = false; // Set to true for testing, false for real data
+// Fast in-memory cache for instant loading
+let eventsCache: {
+  events: Event[];
+  eventsByDate: Map<string, Event[]>;
+  lastUpdated: Date;
+  isInitialized: boolean;
+} | null = null;
+
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+const BACKGROUND_REFRESH_INTERVAL = 55 * 60 * 1000; // Refresh 5 minutes before expiry
+const IS_PRODUCTION = typeof window !== 'undefined' && window.location?.hostname !== 'localhost';
+
+// Try to import Vercel KV for production
+let kv: any = null;
+try {
+  if (IS_PRODUCTION) {
+    kv = require('@vercel/kv').kv;
+  }
+} catch (error) {
+  console.log('KV not available, using client-side scraping');
+}
+
+// Initialize cache on first load
+async function initializeCache(): Promise<void> {
+  if (eventsCache?.isInitialized) return;
+  
+  console.log('⚡ Initializing event cache...');
+  const scraperService = getClientScraperService();
+  const result = await scraperService.scrapeAllSources();
+  
+  // Pre-organize events by date for instant filtering
+  const eventsByDate = new Map<string, Event[]>();
+  result.events.forEach(event => {
+    if (!eventsByDate.has(event.date)) {
+      eventsByDate.set(event.date, []);
+    }
+    eventsByDate.get(event.date)!.push(event);
+  });
+  
+  eventsCache = {
+    events: result.events,
+    eventsByDate,
+    lastUpdated: new Date(),
+    isInitialized: true
+  };
+  
+  console.log(`⚡ Cache initialized with ${result.events.length} events`);
+  
+  // Schedule background refresh
+  setTimeout(backgroundRefresh, BACKGROUND_REFRESH_INTERVAL);
+}
+
+// Background refresh to keep cache warm
+async function backgroundRefresh(): Promise<void> {
+  try {
+    console.log('🔄 Background refresh starting...');
+    const scraperService = getClientScraperService();
+    const result = await scraperService.scrapeAllSources();
+    
+    const eventsByDate = new Map<string, Event[]>();
+    result.events.forEach(event => {
+      if (!eventsByDate.has(event.date)) {
+        eventsByDate.set(event.date, []);
+      }
+      eventsByDate.get(event.date)!.push(event);
+    });
+    
+    eventsCache = {
+      events: result.events,
+      eventsByDate,
+      lastUpdated: new Date(),
+      isInitialized: true
+    };
+    
+    console.log(`🔄 Background refresh completed: ${result.events.length} events`);
+  } catch (error) {
+    console.error('Background refresh failed:', error);
+  }
+  
+  // Schedule next refresh
+  setTimeout(backgroundRefresh, BACKGROUND_REFRESH_INTERVAL);
+}
 
 export async function getEventsByDay(startDate: Date, endDate: Date): Promise<Event[]> {
-  if (USE_MOCK) {
-    return getMockEvents(startDate, endDate);
-  }
-
   try {
-    const events: Event[] = [];
-    const current = new Date(startDate);
-    
-    while (current <= endDate) {
-      const dateKey = format(current, 'yyyy-MM-dd');
-      const dayEvents = await kv.get<Event[]>(`events:${dateKey}`);
-      if (dayEvents) {
-        events.push(...dayEvents);
-      }
-      current.setDate(current.getDate() + 1);
+    // Use Vercel KV in production, client scraper in development
+    if (IS_PRODUCTION && kv) {
+      return await getEventsFromKV(startDate, endDate);
+    } else {
+      return await getEventsFromClientCache(startDate, endDate);
     }
-    
-    return events.sort((a, b) => 
-      new Date(a.date + ' ' + a.startTime).getTime() - 
-      new Date(b.date + ' ' + b.startTime).getTime()
-    );
   } catch (error) {
     console.error('Error fetching events:', error);
     return getMockEvents(startDate, endDate);
   }
 }
 
-export async function getEventById(id: string): Promise<Event | null> {
-  if (USE_MOCK) {
-    return getMockEvents(new Date(), new Date()).find(e => e.id === id) || null;
+// Production: Get events from Vercel KV
+async function getEventsFromKV(startDate: Date, endDate: Date): Promise<Event[]> {
+  const events: Event[] = [];
+  const current = new Date(startDate);
+  
+  while (current <= endDate) {
+    const dateKey = format(current, 'yyyy-MM-dd');
+    try {
+      const dayEvents = await kv.get<Event[]>(`events:${dateKey}`);
+      if (dayEvents && Array.isArray(dayEvents)) {
+        events.push(...dayEvents);
+      }
+    } catch (error) {
+      console.warn(`Failed to get events for ${dateKey}:`, error);
+    }
+    current.setDate(current.getDate() + 1);
   }
+  
+  return events.sort((a, b) => {
+    const timeA = new Date(a.date + ' ' + (a.startTime || '00:00')).getTime();
+    const timeB = new Date(b.date + ' ' + (b.startTime || '00:00')).getTime();
+    return timeA - timeB;
+  });
+}
 
+// Development: Get events from client cache
+async function getEventsFromClientCache(startDate: Date, endDate: Date): Promise<Event[]> {
+  await initializeCache();
+  
+  if (!eventsCache) {
+    throw new Error('Cache initialization failed');
+  }
+  
+  const events: Event[] = [];
+  const current = new Date(startDate);
+  
+  while (current <= endDate) {
+    const dateKey = format(current, 'yyyy-MM-dd');
+    const dayEvents = eventsCache.eventsByDate.get(dateKey) || [];
+    events.push(...dayEvents);
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return events.sort((a, b) => {
+    const timeA = new Date(a.date + ' ' + (a.startTime || '00:00')).getTime();
+    const timeB = new Date(b.date + ' ' + (b.startTime || '00:00')).getTime();
+    return timeA - timeB;
+  });
+}
+
+export async function getEventById(id: string): Promise<Event | null> {
   try {
-    return await kv.get<Event>(`event:${id}`);
+    if (IS_PRODUCTION && kv) {
+      // Try to get from a wider date range in production
+      const events = await getEventsFromKV(
+        new Date(), 
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      );
+      return events.find(e => e.id === id) || null;
+    } else {
+      await initializeCache();
+      
+      if (!eventsCache) {
+        throw new Error('Cache not available');
+      }
+      
+      return eventsCache.events.find(e => e.id === id) || null;
+    }
   } catch (error) {
     console.error('Error fetching event:', error);
-    return null;
+    return getMockEvents(new Date(), new Date()).find(e => e.id === id) || null;
   }
+}
+
+// Get cache statistics for debugging
+export function getCacheStats(): { totalEvents: number; lastUpdated: Date | null; isInitialized: boolean } {
+  if (IS_PRODUCTION && kv) {
+    return {
+      totalEvents: 0, // KV stats not easily accessible
+      lastUpdated: new Date(), // Assume recent
+      isInitialized: true
+    };
+  }
+  
+  return {
+    totalEvents: eventsCache?.events.length || 0,
+    lastUpdated: eventsCache?.lastUpdated || null,
+    isInitialized: eventsCache?.isInitialized || false
+  };
 }
 
 // Mock data for development
