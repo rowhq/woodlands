@@ -2,7 +2,7 @@
 
 A unified mobile and web app for discovering events in The Woodlands, Texas.
 
-## Features
+## Features 1
 
 - 📅 Daily event view (Today, Tomorrow, This Week)
 - 📱 Works on iOS, Android, and Web
