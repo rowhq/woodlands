@@ -6,7 +6,9 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build": "expo export -p web",
+    "dev": "expo start --web"
   },
   "dependencies": {
     "@ant-design/react-native": "^5.4.2",
