@@ -2,8 +2,8 @@ import { Event } from '../types/event';
 import { format } from 'date-fns';
 import { kv } from '@vercel/kv';
 
-// For development, we'll use mock data until KV is configured
-const USE_MOCK = true;
+// Switch to real KV now that it's configured
+const USE_MOCK = false;
 
 export async function getEventsByDay(startDate: Date, endDate: Date): Promise<Event[]> {
   if (USE_MOCK) {
