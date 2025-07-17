@@ -6,8 +6,9 @@ import { PavilionScraper } from '../../lib/scrapers/pavilion-scraper';
 import { Event } from '../../lib/types/event';
 
 export const runtime = 'edge';
+export const maxDuration = 300; // 5 minutes max
 
-// Vercel Cron job to refresh events every hour
+// Vercel Cron job to refresh events every 5 minutes
 export default async function handler(req: NextRequest) {
   // Verify this is a valid cron request
   const authHeader = req.headers.get('authorization');
@@ -16,6 +17,7 @@ export default async function handler(req: NextRequest) {
   }
 
   console.log('🔄 Starting scheduled event refresh...');
+  const startTime = Date.now();
   
   try {
     const scrapers = [
@@ -28,22 +30,40 @@ export default async function handler(req: NextRequest) {
     const allErrors: string[] = [];
     let totalEvents = 0;
 
-    // Scrape from all sources
-    for (const scraper of scrapers) {
+    // Scrape from all sources in parallel for speed
+    const scrapingPromises = scrapers.map(async (scraper) => {
       try {
         console.log(`📡 Scraping ${scraper.source}...`);
-        const result = await scraper.scrape();
         
-        allEvents.push(...result.events);
-        allErrors.push(...result.errors);
-        totalEvents += result.events.length;
+        // Set timeout per scraper to prevent hanging
+        const result = await Promise.race([
+          scraper.scrape(),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Scraper timeout')), 60000) // 1 minute per scraper
+          )
+        ]);
         
         console.log(`✅ ${scraper.source}: ${result.events.length} events`);
+        return result;
       } catch (error) {
         const errorMsg = `Failed to scrape ${scraper.source}: ${error}`;
         console.error(errorMsg);
-        allErrors.push(errorMsg);
+        return {
+          events: [],
+          errors: [errorMsg],
+          scrapedAt: new Date(),
+          source: scraper.source
+        };
       }
+    });
+
+    const results = await Promise.all(scrapingPromises);
+    
+    // Combine all results
+    for (const result of results) {
+      allEvents.push(...result.events);
+      allErrors.push(...result.errors);
+      totalEvents += result.events.length;
     }
 
     // Remove duplicates
@@ -61,13 +81,15 @@ export default async function handler(req: NextRequest) {
       errors: allErrors
     });
 
-    console.log(`✅ Successfully updated ${uniqueEvents.length} events`);
+    const executionTime = Date.now() - startTime;
+    console.log(`✅ Successfully updated ${uniqueEvents.length} events in ${executionTime}ms`);
 
     return Response.json({
       success: true,
       totalEvents: uniqueEvents.length,
       errors: allErrors,
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
+      executionTime: `${executionTime}ms`
     });
 
   } catch (error) {

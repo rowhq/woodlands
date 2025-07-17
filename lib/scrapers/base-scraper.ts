@@ -26,8 +26,8 @@ export abstract class EventScraper {
   abstract readonly source: EventSource;
   abstract readonly baseUrl: string;
   
-  protected maxRetries = 3;
-  protected retryDelay = 1000; // 1 second
+  protected maxRetries = 2; // Reduced for faster execution
+  protected retryDelay = 500; // Reduced to 500ms
 
   async scrape(): Promise<ScrapingResult> {
     const startTime = new Date();

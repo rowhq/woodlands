@@ -14,6 +14,7 @@ export class WoodlandsOnlineScraper extends EventScraper {
           'User-Agent': 'Woodlands Events App (woodlands-events@example.com)',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
+        signal: AbortSignal.timeout(10000), // 10 second timeout
       });
 
       if (!response.ok) {
