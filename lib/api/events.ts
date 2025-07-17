@@ -2,8 +2,8 @@ import { Event } from '../types/event';
 import { format } from 'date-fns';
 import { kv } from '@vercel/kv';
 
-// Use mock data for now until we have scrapers populating KV
-const USE_MOCK = true;
+// Switch between real scraped data and mock data
+const USE_MOCK = false; // Set to true for testing, false for real data
 
 export async function getEventsByDay(startDate: Date, endDate: Date): Promise<Event[]> {
   if (USE_MOCK) {

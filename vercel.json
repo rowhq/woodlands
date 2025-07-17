@@ -5,7 +5,17 @@
   "installCommand": "npm install",
   "framework": null,
   "public": true,
+  "crons": [
+    {
+      "path": "/api/cron/scrape-events",
+      "schedule": "0 */4 * * *"
+    }
+  ],
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
     {
       "src": "/.*",
       "dest": "/index.html"
